@@ -4,7 +4,8 @@
 
 # Google AI Studio
 
-Brings Google AI Studio to Cactus. Paste in one API key and the site can make pictures for you.
+Brings Google AI Studio to Cactus. Paste in one API key and the site can make pictures for you and
+draft your replies.
 
 The first thing it does with that key: **AI photo creation** on a shop product's **Images** tab.
 Pick the photographs you already have - the product's own, its variations', and any picture
@@ -16,6 +17,13 @@ the product's own 3D model, with a dropdown per option so you can put it in the 
 want, and every press of **Create view** adds the current angle to the pictures going to Google.
 Turn the model, press it again, and the AI is working from four real views of the real product
 instead of guessing at three of them.
+
+The second thing it does with that key: **Suggest reply**. Wherever this site has a reply box - the
+Unified Inbox, the contact form's own inbox - there is a button under the writing that reads the
+conversation and offers three drafts. Click one to try it in the box, tick to keep it, cross to put
+back what you were writing. It is published through core's `core.reply-suggestions` seam, so this
+module never learns which module the conversation came from and the module holding it never learns
+which model answered.
 
 ## Installing
 
@@ -39,6 +47,8 @@ stored encrypted with the site's own `ENCRYPTION_KEY`.
 | Shape | Aspect ratio of new pictures (`1:1`, `4:5`, `16:9`, …). |
 | Size | `512`, `1K`, `2K` or `4K`. Bigger costs more and takes longer. |
 | Model | Which Google picture model to use. A plain text box on purpose: Google names a new one every few months and a site should not have to wait for a module release to try it. |
+| House style for replies | Added to the front of every suggested reply - how the business SOUNDS. Deliberately about manner rather than content: a house style that starts answering questions gets those answers given confidently on conversations where they are not true. |
+| Writing model | Which Google model writes the drafts. A different one from the picture model; a plain text box for the same reason. |
 
 ## How the picture-making works
 
@@ -59,6 +69,27 @@ stored encrypted with the site's own `ENCRYPTION_KEY`.
   the product's own photographs - and hands it to the product editor's gallery as an unsaved edit.
   The editor's own **Save** button is what commits it.
 - Nothing is stored on Google's side: the API is called with `store: false`.
+
+## How the reply-suggesting works
+
+- Published through core's `core.reply-suggestions` extension point (`lib/reply-suggestions.ts`,
+  `serverOnly`). Core hands over the conversation as plain words and gets drafts back; **neither end
+  learns the other**. This module never knows whether the messages came from a mailbox, a contact
+  form or a chat widget, and the module holding them never knows which model answered.
+- `isConfigured()` reads the settings row and nothing else. It has to be cheap: a reply box asks it
+  while it is being drawn, to decide whether to draw the button at all.
+- One call to `generateContent`, pinned to a JSON array of strings with a response schema
+  (`lib/gemini-text.ts`). A model asked politely for "three replies, numbered" will one day answer
+  with two, or four, or a preamble - a schema is what stops that becoming a parsing problem.
+- The prompt is built in `lib/reply-prompt.ts`, which is pure and tested: house style, then the
+  transcript between fences, then the instruction. The transcript is DATA and the prompt says so
+  **before** the fences as well as after, and anything in a message that looks like the closing fence
+  is defused on the way in - a stranger typed those words.
+- A message carries a `role` of `them`, `us` or `note` rather than a direction. A note is a colleague
+  talking to a colleague: it is context worth having, and is marked as something the customer has
+  never seen so it is not quoted back at them.
+- Google's own wording for a failure is carried across rather than flattened - "check the key", "we
+  do not know that model" - along with its status, so a rate limit still reads as one at the far end.
 
 ## What it depends on
 
@@ -81,6 +112,10 @@ in either direction, and the two halves can be released in either order - an unr
 contributor simply never appears, and a contributor with nobody listening says so.
 
 `product-3d-views-for-shop` **0.1.100** is the first version to contribute one.
+
+The reply-suggesting half needs no module at all beyond something with a reply box on it.
+`unified-inbox` and `contact-form` each consume the seam from a route of their own; a site with
+neither simply has nowhere for the button to appear.
 
 Handing a finished picture to the product editor needs Shop **0.1.412** or newer (the release that
 added the gallery-add seam). On an older shop the picture still lands in the media library, and the

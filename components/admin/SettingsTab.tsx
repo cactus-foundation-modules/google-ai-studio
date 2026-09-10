@@ -8,11 +8,14 @@ type State = {
   hasApiKey: boolean
   apiKeyFromEnv: boolean
   imageModel: string
+  textModel: string
   defaultImageCount: number
   productPhotoPrompt: string
+  replyHouseStyle: string
   aspectRatio: string
   imageSize: string
   housePromptDefault: string
+  replyHouseStyleDefault: string
   maxImageCount: number
   aspectRatios: string[]
   imageSizes: string[]
@@ -22,8 +25,10 @@ type State = {
 type Draft = {
   apiKey: string
   imageModel: string
+  textModel: string
   defaultImageCount: number
   productPhotoPrompt: string
+  replyHouseStyle: string
   aspectRatio: string
   imageSize: string
 }
@@ -34,8 +39,10 @@ function draftOf(state: State): Draft {
     // empty box means "leave whatever is saved alone".
     apiKey: '',
     imageModel: state.imageModel,
+    textModel: state.textModel,
     defaultImageCount: state.defaultImageCount,
     productPhotoPrompt: state.productPhotoPrompt,
+    replyHouseStyle: state.replyHouseStyle,
     aspectRatio: state.aspectRatio,
     imageSize: state.imageSize,
   }
@@ -101,8 +108,10 @@ export function GoogleAiStudioSettingsTab() {
   const save = () => {
     const body: Record<string, unknown> = {
       imageModel: draft.imageModel,
+      textModel: draft.textModel,
       defaultImageCount: draft.defaultImageCount,
       productPhotoPrompt: draft.productPhotoPrompt,
+      replyHouseStyle: draft.replyHouseStyle,
       aspectRatio: draft.aspectRatio,
       imageSize: draft.imageSize,
     }
@@ -113,10 +122,11 @@ export function GoogleAiStudioSettingsTab() {
   return (
     <div>
       <p className="field-hint" style={{ marginBottom: '1.25rem' }}>
-        One key from Google AI Studio, and this site can make pictures for you. With the Shop
-        installed, a product&rsquo;s Images tab grows an AI photo section: pick the photographs you
-        already have, say what you would like, and choose from what comes back. Google charges for
-        each picture, so the numbers below are worth a moment&rsquo;s thought.
+        One key from Google AI Studio, and this site can make pictures for you and draft replies to
+        your customers. With the Shop installed, a product&rsquo;s Images tab grows an AI photo
+        section; with a mailbox or a contact form installed, the reply box grows a
+        &ldquo;Suggest reply&rdquo; button. Google charges for both, so the settings below are worth
+        a moment&rsquo;s thought.
       </p>
 
       {saved.apiKeyFromEnv && (
@@ -162,6 +172,8 @@ export function GoogleAiStudioSettingsTab() {
           itself to. The key keeps until there is.
         </div>
       )}
+
+      <h3 style={{ fontSize: '0.9375rem', margin: '1.5rem 0 0.25rem' }}>Pictures</h3>
 
       <div className="field">
         <label>How many pictures a job makes</label>
@@ -233,6 +245,55 @@ export function GoogleAiStudioSettingsTab() {
         <p className="field-hint">
           Which of Google&rsquo;s picture models to use. Leave it alone unless Google has named a new
           one and you would like to try it.
+        </p>
+      </div>
+
+      <h3 style={{ fontSize: '0.9375rem', margin: '1.5rem 0 0.25rem' }}>Replies</h3>
+      <p className="field-hint" style={{ marginBottom: '0.75rem' }}>
+        Wherever this site has a reply box - a mailbox, the contact form - there is a
+        &ldquo;Suggest reply&rdquo; button under it. Pressing it sends that conversation to Google
+        and offers three drafts back. Nothing is ever sent to anybody without somebody reading it
+        first, and nothing at all leaves this site until the button is pressed.
+      </p>
+
+      <div className="field">
+        <label>House style for replies</label>
+        <textarea
+          rows={5}
+          value={draft.replyHouseStyle}
+          onChange={(e) => set('replyHouseStyle', e.target.value)}
+        />
+        <p className="field-hint">
+          How your business sounds when it writes to somebody - formal or friendly, brisk or
+          chatty, what you would never say. Not what to say: that is the conversation&rsquo;s
+          business, and a house style that starts answering questions will happily invent the
+          answers.
+          {draft.replyHouseStyle !== saved.replyHouseStyleDefault && (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="btn btn-link btn-sm"
+                onClick={() => set('replyHouseStyle', saved.replyHouseStyleDefault)}
+              >
+                Restore the standard wording
+              </button>
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="field">
+        <label>Writing model</label>
+        <input
+          type="text"
+          value={draft.textModel}
+          onChange={(e) => set('textModel', e.target.value)}
+        />
+        <p className="field-hint">
+          Which of Google&rsquo;s models writes the drafts. A different one from the picture model
+          above, because a model that draws cannot write a sentence. Leave it alone unless Google
+          has named a new one and you would like to try it.
         </p>
       </div>
 
