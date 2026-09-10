@@ -33,11 +33,36 @@ export type GeneratedImage = { mimeType: string, bytes: Buffer }
 /** Thrown for anything the owner needs told about in words. */
 export class GoogleAiError extends Error {
   readonly status: number
-  constructor(message: string, status = 502) {
+  /** How long Google asked us to wait, where it said. Only ever set on a 429. */
+  readonly retryAfterSeconds: number | null
+  constructor(message: string, status = 502, retryAfterSeconds: number | null = null) {
     super(message)
     this.name = 'GoogleAiError'
     this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
   }
+}
+
+/**
+ * Google's `Retry-After`, in seconds, when it sent one worth honouring.
+ *
+ * The header comes in two shapes and both are legal: a plain number of seconds,
+ * or an HTTP date. Anything else - absent, unparseable, in the past, or a value
+ * so large it is plainly not about this request - answers null and lets the
+ * caller's own backoff decide. Capped at an hour so a stray header cannot park
+ * a browser on a countdown until Christmas.
+ */
+export function parseRetryAfter(header: string | null, now: number = Date.now()): number | null {
+  if (!header) return null
+  const trimmed = header.trim()
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed)
+    return seconds > 0 && seconds <= 3600 ? seconds : null
+  }
+  const at = Date.parse(trimmed)
+  if (Number.isNaN(at)) return null
+  const seconds = Math.ceil((at - now) / 1000)
+  return seconds > 0 && seconds <= 3600 ? seconds : null
 }
 
 // The two shapes a picture comes back in: the convenience property, and the
@@ -63,7 +88,7 @@ const ErrorBody = z.object({
 })
 
 /** Plain English for the handful of failures an owner can actually do something about. */
-function describeHttpFailure(httpStatus: number, message: string | undefined): GoogleAiError {
+function describeHttpFailure(httpStatus: number, message: string | undefined, retryAfter: number | null): GoogleAiError {
   if (httpStatus === 400 && message) return new GoogleAiError(`Google would not accept that request: ${message}`, 400)
   if (httpStatus === 401 || httpStatus === 403) {
     return new GoogleAiError('Google refused that API key. Check it on the Google AI Studio settings tab.', 401)
@@ -72,7 +97,9 @@ function describeHttpFailure(httpStatus: number, message: string | undefined): G
     return new GoogleAiError('Google does not know that model. Check the model name on the Google AI Studio settings tab.', 404)
   }
   if (httpStatus === 429) {
-    return new GoogleAiError('Google is rate limiting this key at the moment. Wait a minute and try again.', 429)
+    // The one failure that mends itself. The message is kept for anywhere that
+    // shows it plainly; the caller that can wait keys off the 429 and the hint.
+    return new GoogleAiError('Google is rate limiting this key at the moment.', 429, retryAfter)
   }
   return new GoogleAiError(message ? `Google said: ${message}` : `Google returned an error (${httpStatus}).`)
 }
@@ -132,7 +159,11 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
 
   if (!response.ok) {
     const parsed = ErrorBody.safeParse(json)
-    throw describeHttpFailure(response.status, parsed.success ? parsed.data.error?.message : undefined)
+    throw describeHttpFailure(
+      response.status,
+      parsed.success ? parsed.data.error?.message : undefined,
+      parseRetryAfter(response.headers.get('retry-after')),
+    )
   }
 
   const parsed = ResponseBody.safeParse(json)

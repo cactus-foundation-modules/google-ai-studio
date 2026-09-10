@@ -5,7 +5,7 @@ import { errorResponse } from '@/lib/utils'
 import { getGoogleAiConfig } from '@/modules/google-ai-studio/lib/settings'
 import { GoogleAiError, generateImage } from '@/modules/google-ai-studio/lib/gemini'
 import { loadReferences } from '@/modules/google-ai-studio/lib/references'
-import { addJobImage, getJob, listJobImages } from '@/modules/google-ai-studio/lib/jobs'
+import { addJobImage, getJob, listJobImages, listJobSourceImages } from '@/modules/google-ai-studio/lib/jobs'
 
 /** Make ONE more picture for this job.
  *
@@ -35,9 +35,14 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   }
 
   const urls = Array.isArray(job.source_urls) ? job.source_urls.filter((u): u is string => typeof u === 'string') : []
+  // Views captured from a 3D model, kept with the job because there is no url to
+  // fetch them back from. They go last: Google reads its references in order and
+  // the last one carries most weight, and a view chosen deliberately for its
+  // angle is the more particular instruction of the two.
+  const captured = await listJobSourceImages(id)
 
   try {
-    const references = await loadReferences(urls)
+    const references = await loadReferences(urls, captured.map(({ mimeType, data }) => ({ mimeType, data })))
     const image = await generateImage({
       apiKey: config.apiKey,
       // The job's own model and shape, not today's settings: a job half way
@@ -52,7 +57,18 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const candidate = await addJobImage(id, image.mimeType, image.bytes)
     return NextResponse.json({ candidate, made: already.length + 1, requested: job.requested }, { status: 201 })
   } catch (error) {
-    if (error instanceof GoogleAiError) return errorResponse(error.message, error.status)
+    if (error instanceof GoogleAiError) {
+      // A rate limit is the one failure that mends itself with time, so it is
+      // reported as a fact the caller can act on rather than only as a sentence.
+      // The browser waits it out and asks again; see ProductPhotosPanel.
+      if (error.status === 429) {
+        return NextResponse.json(
+          { error: error.message, retryable: true, retryAfterSeconds: error.retryAfterSeconds },
+          { status: 429 },
+        )
+      }
+      return errorResponse(error.message, error.status)
+    }
     console.error('[google-ai-studio] image generation failed', error)
     return errorResponse('Something went wrong making that picture.', 500)
   }

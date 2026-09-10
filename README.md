@@ -11,6 +11,12 @@ Pick the photographs you already have - the product's own, its variations', and 
 attributes on it - say what you would like, and choose from what comes back. Nothing is added to the
 product, or even to your media library, until you say so.
 
+With the **3D views** module installed there is a **From 3D models** button alongside them. It opens
+the product's own 3D model, with a dropdown per option so you can put it in the colour and size you
+want, and every press of **Create view** adds the current angle to the pictures going to Google.
+Turn the model, press it again, and the AI is working from four real views of the real product
+instead of guessing at three of them.
+
 ## Installing
 
 1. Install the module from **Modules** in the admin.
@@ -39,6 +45,14 @@ stored encrypted with the site's own `ENCRYPTION_KEY`.
 - One call to Google makes one picture, so a job asking for four makes four calls. The browser makes
   them one at a time and shows each picture as it lands, which is also what keeps every request
   inside the sixty seconds a module route gets.
+- **A rate limit waits itself out.** Google answering 429 is not a failure - the key is fine, the
+  request is fine, and only the moment is wrong. The browser honours Google's own `Retry-After` where
+  it sent one, otherwise backs off 15s, 25s, 40s, 60s with a little jitter (so four pictures failing
+  together do not all come back together and get refused together), and keeps asking until it has a
+  picture. It shows a countdown and a **Stop** button throughout, and gives up the moment the page
+  goes - it is tied to an `AbortController` that unmount, `pagehide`, **Stop** and **Discard** all
+  end. Nothing is retried on the server: a module route has sixty seconds and a quota window has
+  rather more than that.
 - Candidates are kept in this module's own tables, not in the media library, because most of them are
   rejected. They are swept once they are a day old.
 - Accepting a picture uploads it into the media library like any other upload - in the same folder as
@@ -58,6 +72,16 @@ found by looking for the tables rather than by naming the module:
 | `svr_variants` | Each variation's lead photograph as a source |
 | `pat_attribute_values` | Picture attributes on the product or its variations as sources |
 
+Extra sources of reference pictures are contributed by other modules through the
+`google-ai-studio.reference-image-sources` extension point, which this module hosts. A contributor
+renders whatever picker it likes and hands each finished picture over by dispatching a cancelable
+`cactus-ai-reference-image` window event carrying `{ dataUrl, label }`; this panel takes it by
+cancelling the event, so a contributor can tell whether anything was listening. Nothing is imported
+in either direction, and the two halves can be released in either order - an unrecognised
+contributor simply never appears, and a contributor with nobody listening says so.
+
+`product-3d-views-for-shop` **0.1.100** is the first version to contribute one.
+
 Handing a finished picture to the product editor needs Shop **0.1.412** or newer (the release that
 added the gallery-add seam). On an older shop the picture still lands in the media library, and the
 panel says so rather than pretending otherwise.
@@ -69,3 +93,4 @@ panel says so rather than pretending otherwise.
 | `gas_settings` | The singleton settings row, key encrypted |
 | `gas_jobs` | One "make me some pictures" request - scratch, swept after a day |
 | `gas_job_images` | The candidates a job produced, until they are accepted or thrown away |
+| `gas_job_source_images` | Reference pictures with no url of their own - a captured 3D view - kept only for the life of the job |

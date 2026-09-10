@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 
 // A job is scratch. It exists between "make me four of these" and the owner
@@ -57,6 +58,44 @@ export async function createJob(input: {
   const id = rows[0]?.id
   if (!id) throw new Error('Could not start that job.')
   return id
+}
+
+/** A reference picture stored with the job rather than named by a url. */
+export type JobSourceImage = { mimeType: string, data: string, label: string }
+
+/**
+ * Keep the reference pictures a job was handed as bytes.
+ *
+ * Written in one statement rather than one per picture: half a dozen views is
+ * an ordinary ask, and six round trips to store what arrived in one request is
+ * six chances for the job to end up with a partial set of references.
+ */
+export async function addJobSourceImages(jobId: string, images: JobSourceImage[]): Promise<void> {
+  if (images.length === 0) return
+  // Same decode() treatment as a candidate's bytes, and for the same reason:
+  // the base64 says what is meant in the query itself rather than trusting an
+  // untyped Buffer parameter to survive the round trip. See addJobImage.
+  const values = Prisma.join(images.map((image, position) => Prisma.sql`(
+    ${jobId}, ${image.mimeType}, decode(${image.data}, 'base64'),
+    ${Buffer.byteLength(image.data, 'base64')}, ${image.label}, ${position}
+  )`))
+  await prisma.$executeRaw`
+    INSERT INTO "gas_job_source_images" ("job_id", "mime_type", "bytes", "size_bytes", "label", "position")
+    VALUES ${values}
+  `
+}
+
+/** A job's stored reference pictures, in the order they were handed over. */
+export async function listJobSourceImages(jobId: string): Promise<JobSourceImage[]> {
+  // Read back as base64 for the same reason it was written that way: a bytea
+  // column comes out of a raw query as a Uint8Array, not always a Buffer.
+  const rows = await prisma.$queryRaw<{ mime_type: string, b64: string, label: string }[]>`
+    SELECT "mime_type", encode("bytes", 'base64') AS "b64", "label"
+      FROM "gas_job_source_images"
+     WHERE "job_id" = ${jobId}
+     ORDER BY "position" ASC, "created_at" ASC
+  `
+  return rows.map((row) => ({ mimeType: row.mime_type, data: row.b64, label: row.label }))
 }
 
 export async function getJob(id: string): Promise<JobRow | null> {

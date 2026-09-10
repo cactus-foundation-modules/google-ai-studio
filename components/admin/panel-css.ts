@@ -28,6 +28,30 @@ export const panelCss = `
 .gas-note{font-size:0.75rem;color:var(--color-text-secondary)}
 .gas-details{margin:0 0 1rem;font-size:0.8125rem}
 .gas-details summary{cursor:pointer;color:var(--color-text-secondary)}
+/* A textarea carries its own intrinsic width from its cols attribute, and only
+   the prompt box escapes it by sitting in a stretching flex column. The house
+   style box is not in one, so it was a paragraph of prose being typed into
+   something the width of a postcode. Every textarea in the panel is told
+   outright instead of relying on where it happens to sit. */
+.gas-card textarea{display:block;width:100%;box-sizing:border-box;resize:vertical}
 .gas-details textarea{margin-top:0.5rem}
+.gas-fold{border:1px solid var(--color-border);border-radius:var(--radius-md);padding:0.5rem 0.75rem;background:var(--color-bg-subtle)}
+/* A flex summary takes the browser's own disclosure triangle away with it,
+   so the panel draws its own rather than leaving a fold with nothing to say it
+   is one. Built from borders in currentColor, which is a token here. */
+.gas-fold>summary{cursor:pointer;display:flex;gap:0.5rem;align-items:baseline;flex-wrap:wrap;list-style:none}
+.gas-fold>summary::-webkit-details-marker{display:none}
+.gas-fold>summary::before{content:'';flex:0 0 auto;align-self:center;width:0;height:0;
+  border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;
+  color:var(--color-text-secondary);transition:transform .15s ease}
+.gas-fold[open]>summary::before{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.gas-fold>summary::before{transition:none}}
+.gas-fold-title{font-size:0.8125rem;font-weight:600;color:var(--color-text)}
+.gas-fold-count{font-size:0.75rem;color:var(--color-text-secondary)}
+.gas-fold[open]>summary{margin-bottom:0.5rem}
+.gas-tile-wrap{position:relative}
+.gas-remove{position:absolute;top:0.375rem;right:0.375rem;z-index:1;width:1.25rem;height:1.25rem;border-radius:var(--radius-full);border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-secondary);font-size:0.75rem;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.gas-remove:hover{color:var(--color-danger);border-color:var(--color-danger)}
+.gas-source{margin:0 0 1rem;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:0.75rem;background:var(--color-bg-subtle)}
 .gas-placeholder{display:flex;align-items:center;justify-content:center;aspect-ratio:1;font-size:0.75rem;color:var(--color-text-secondary);background:var(--color-bg-subtle);border:1px dashed var(--color-border);border-radius:var(--radius-md)}
 `
