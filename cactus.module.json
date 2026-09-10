@@ -1,0 +1,39 @@
+{
+  "name": "google-ai-studio",
+  "version": "0.1.0",
+  "tablePrefix": "gas_",
+  "description": "Brings Google AI Studio to Cactus: paste in one API key and the site can make pictures for you. With the Shop installed, a product's Images tab grows an AI photo section - pick the photographs you already have, describe the shot you want, and choose from what comes back.",
+  "requiresCoreVersion": "0.5.1570",
+  "permissions": [
+    "google-ai-studio.manage"
+  ],
+  "requiredEnvVars": [
+    { "name": "ENCRYPTION_KEY", "required": true },
+    { "name": "GOOGLE_AI_STUDIO_API_KEY", "required": false }
+  ],
+  "cookieCategories": [],
+  "settingsTabs": [
+    {
+      "id": "google-ai-studio",
+      "label": "Google AI Studio",
+      "permission": "google-ai-studio.manage",
+      "import": "./components/admin/SettingsTab",
+      "component": "GoogleAiStudioSettingsTab"
+    }
+  ],
+  "extensionPoints": [
+    {
+      "point": "shop.product-editor-media-sections",
+      "id": "google-ai-studio-product-photos",
+      "order": 20,
+      "permission": "shop.products",
+      "import": "./components/admin/ProductPhotosSection",
+      "component": "ProductPhotosSection"
+    }
+  ],
+  "teardown": [
+    "gas_job_images",
+    "gas_jobs",
+    "gas_settings"
+  ]
+}
