@@ -29,7 +29,12 @@ const MAX_DRAFT_CHARS = 4_000
 const ResponseBody = z.object({
   candidates: z.array(z.object({
     content: z.object({
-      parts: z.array(z.object({ text: z.string().optional() }).passthrough()).optional(),
+      parts: z.array(z.object({
+        text: z.string().optional(),
+        // A thinking model may hand back its reasoning as a part of its own.
+        // It is not the answer and must never be concatenated onto it.
+        thought: z.boolean().optional(),
+      }).passthrough()).optional(),
     }).optional(),
     finishReason: z.string().optional(),
   })).optional(),
@@ -51,20 +56,43 @@ function describeHttpFailure(httpStatus: number, message: string | undefined, re
     return new GoogleAiError('Google refused that API key. Check it on the Google AI Studio settings tab.', 401)
   }
   if (httpStatus === 404) {
-    return new GoogleAiError('Google does not know that writing model. Check the model name on the Google AI Studio settings tab.', 404)
+    return new GoogleAiError('Google does not know that writing model. Pick one from the list on the Google AI Studio settings tab.', 404)
   }
   if (httpStatus === 429) {
     return new GoogleAiError('Google is rate limiting this key at the moment.', 429, retryAfter)
   }
+  if (httpStatus === 503) {
+    // Not the key, not the request, not the site: that particular model has
+    // more people asking than it can answer. Newly named models do this for
+    // weeks, which is worth saying, because the fix is to pick another one.
+    return new GoogleAiError(
+      'That writing model is too busy at Google just now. Try again in a moment, or choose a different one on the Google AI Studio settings tab.',
+      503,
+    )
+  }
   return new GoogleAiError(message ? `Google said: ${message}` : `Google returned an error (${httpStatus}).`)
 }
 
-/** Every text part of the first candidate, joined. Structured output arrives in
- *  one part in practice and is allowed by the API to arrive in several. */
-function firstText(body: z.infer<typeof ResponseBody>): string | null {
-  const parts = body.candidates?.[0]?.content?.parts ?? []
-  const text = parts.map((part) => part.text ?? '').join('').trim()
+/**
+ * Every ANSWER part of the first candidate, joined.
+ *
+ * Structured output arrives in one part in practice and is allowed by the API
+ * to arrive in several, hence the join. `thought` parts are dropped rather than
+ * joined: the models worth using here all think before they answer - a verified
+ * call spent a thousand tokens doing it - and a reasoning part concatenated
+ * onto the JSON would fail to parse and be served to somebody as a draft.
+ */
+export function answerText(parts: Array<{ text?: string, thought?: boolean }>): string | null {
+  const text = parts
+    .filter((part) => part.thought !== true)
+    .map((part) => part.text ?? '')
+    .join('')
+    .trim()
   return text.length > 0 ? text : null
+}
+
+function firstText(body: z.infer<typeof ResponseBody>): string | null {
+  return answerText(body.candidates?.[0]?.content?.parts ?? [])
 }
 
 export type GenerateDraftsInput = {

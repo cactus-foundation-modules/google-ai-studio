@@ -57,6 +57,50 @@ export function renderTranscript(messages: ReplySuggestionMessage[]): string {
     .join('\n\n')
 }
 
+/**
+ * Who spoke last, which decides what is being written at all.
+ *
+ * A conversation ending with THEM wants an answer. A conversation ending with
+ * US wants a chase - we said something and nothing came back - and the two are
+ * not variations on each other: asked for a reply to a thread whose last
+ * message is our own, a model dutifully answers our own email, in the customer's
+ * voice, on our behalf. It reads like a reply because it is one; it is simply a
+ * reply to the wrong person.
+ *
+ * Notes are skipped. A colleague adding "chase this on Friday" has not said
+ * anything to the customer, and it must not turn a chase into an answer.
+ */
+export type ReplyStance = 'answering' | 'following-up'
+
+export function stanceFor(messages: ReplySuggestionMessage[]): ReplyStance {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (!message || message.role === 'note') continue
+    return message.role === 'us' ? 'following-up' : 'answering'
+  }
+  // Nothing either way - a conversation of notes alone, or none at all. There
+  // is nothing to chase, so the ordinary case it is.
+  return 'answering'
+}
+
+/** Whole days between our last word and now, where both are known. Null rather
+ *  than a guess: a follow-up that names a length of time it made up is worse
+ *  than one that does not mention it. */
+export function daysSinceLastOwnMessage(
+  messages: ReplySuggestionMessage[],
+  now: Date = new Date(),
+): number | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (!message || message.role !== 'us') continue
+    const at = message.sentAt
+    if (!at || Number.isNaN(at.getTime())) return null
+    const days = Math.floor((now.getTime() - at.getTime()) / 86_400_000)
+    return days >= 0 ? days : null
+  }
+  return null
+}
+
 export type ReplyPromptInput = {
   /** How this business sounds. The site's own setting. */
   houseStyle: string
@@ -65,19 +109,51 @@ export type ReplyPromptInput = {
   authorName: string | null
   messages: ReplySuggestionMessage[]
   count: number
+  /** Only so the "it has been N days" line can be tested. */
+  now?: Date
 }
 
 export function composeReplyPrompt(input: ReplyPromptInput): string {
   const houseStyle = input.houseStyle.trim()
   const subject = input.subject?.trim()
   const author = input.authorName?.trim()
-  const plural = input.count === 1 ? 'one reply' : `${input.count} different replies`
+
+
+  const stance = stanceFor(input.messages)
+  const chasing = stance === 'following-up'
+  const days = chasing ? daysSinceLastOwnMessage(input.messages, input.now) : null
+  // Spelled out rather than suffixed with an "s": "reply" pluralises to
+  // "replies", and asking a model for three "replys" is a poor advertisement
+  // for a feature whose whole job is writing English.
+  const noun = chasing ? 'follow-up' : 'reply'
+  const nouns = chasing ? 'follow-ups' : 'replies'
+  const plural = input.count === 1 ? `one ${noun}` : `${input.count} different ${nouns}`
+  const waited = days === null
+    ? null
+    : days === 0
+      ? 'It went out today.'
+      : days === 1
+        ? 'It went out yesterday.'
+        : `It went out ${days} days ago.`
 
   const lines: (string | null)[] = [
-    'You are drafting a reply on behalf of a business, for a member of staff to read, edit and send.',
+    chasing
+      ? 'You are drafting a FOLLOW-UP on behalf of a business, for a member of staff to read, edit and send.'
+      : 'You are drafting a reply on behalf of a business, for a member of staff to read, edit and send.',
     '',
     houseStyle ? `HOUSE STYLE\n${houseStyle}\n` : null,
     subject ? `SUBJECT: ${subject}\n` : null,
+    // Said BEFORE the transcript, because by the time a model has read our own
+    // email it is already composing an answer to it.
+    chasing
+      ? [
+        'THE LAST MESSAGE ON THIS CONVERSATION IS OUR OWN, AND NOBODY HAS ANSWERED IT.',
+        waited,
+        'You are not replying to it. You are writing the next thing WE send, chasing the reply we',
+        'have not had.',
+      ].filter((line): line is string => line !== null).join(' ')
+      : 'The customer wrote last, and this is our answer to them.',
+    '',
     'The conversation so far, oldest first, is between the fences below.',
     // Said before the transcript as well as after it: a model that reads the
     // instruction first is far harder to talk out of it with the text that
@@ -93,12 +169,21 @@ export function composeReplyPrompt(input: ReplyPromptInput): string {
     `Write ${plural} that the business could send next.`,
     'Rules:',
     `- Each one is a complete message, ready to send${author ? `, from ${author}` : ''}.`,
+    chasing ? '- This is a CHASE, not an answer. Do not reply to our own last message, and do not' : null,
+    chasing ? '  thank them for a message they have not sent.' : null,
+    chasing ? '- Refer back to what we already said rather than repeating it in full, give them an easy' : null,
+    chasing ? '  way to answer, and leave the door open if the answer is no.' : null,
+    chasing ? '- Polite and light. Nobody owes us a reply, and one unanswered email is not a grievance.' : null,
     '- Plain words only. No markdown, no headings, no bullet characters, no subject line.',
     '- Do not invent prices, dates, stock, order numbers or promises the conversation does not already support.',
     '- Where something genuinely is not known, say that it will be checked rather than making it up.',
     '- No greeting placeholders like [Name]: use the name the customer actually gave, or no name at all.',
     '- Do not sign off with a signature block; the site adds its own.',
-    input.count > 1 ? '- Make them genuinely different in approach, not three wordings of one sentence.' : null,
+    input.count > 1
+      ? (chasing
+        ? '- Make them genuinely different in approach - a short nudge, a fuller one, and one that gives them a way out.'
+        : '- Make them genuinely different in approach, not three wordings of one sentence.')
+      : null,
     '',
     `Answer with a JSON array of exactly ${input.count} string${input.count === 1 ? '' : 's'} and nothing else.`,
   ]

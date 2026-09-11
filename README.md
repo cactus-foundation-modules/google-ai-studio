@@ -46,9 +46,9 @@ stored encrypted with the site's own `ENCRYPTION_KEY`.
 | House style | Added to the front of every product photo job. Changeable per job. |
 | Shape | Aspect ratio of new pictures (`1:1`, `4:5`, `16:9`, …). |
 | Size | `512`, `1K`, `2K` or `4K`. Bigger costs more and takes longer. |
-| Model | Which Google picture model to use. A plain text box on purpose: Google names a new one every few months and a site should not have to wait for a module release to try it. |
+| Model | Which Google picture model to use. A **menu of what the key can actually use**, read from Google's own `ListModels`, with a text box behind a link for anything newer than the list. |
 | House style for replies | Added to the front of every suggested reply - how the business SOUNDS. Deliberately about manner rather than content: a house style that starts answering questions gets those answers given confidently on conversations where they are not true. |
-| Writing model | Which Google model writes the drafts. A different one from the picture model; a plain text box for the same reason. |
+| Writing model | Which Google model writes the drafts. Same menu, filtered to models that write. |
 
 ## How the picture-making works
 
@@ -90,6 +90,45 @@ stored encrypted with the site's own `ENCRYPTION_KEY`.
   never seen so it is not quoted back at them.
 - Google's own wording for a failure is carried across rather than flattened - "check the key", "we
   do not know that model" - along with its status, so a rate limit still reads as one at the far end.
+- **Who spoke last decides what is being written at all.** `stanceFor()` walks back through the
+  transcript, skipping notes, and answers `answering` or `following-up`. A conversation ending with
+  our own message gets a chase: the prompt says so **before** the fences (by the time a model has
+  read our email it is already composing an answer to it), names how many days it has been where the
+  transcript knows, and forbids thanking somebody for a message they have not sent. Without it, a
+  model asked for a reply to a thread ending in our own email writes one - a reply to us, in the
+  customer's voice, on our behalf. The hosts read the same fact independently to label the button
+  **Suggest a follow-up**; the wording and the prompt are decided separately and neither trusts the
+  other.
+
+## Model names are asked for, not guessed
+
+Both model settings began as free text boxes, reasoning that Google names a new model every few
+months and no site should wait for a module release to type it in. That reasoning still holds. What
+it missed is that a typed name is a **guess**, and a wrong guess is not found out until somebody
+presses the button and gets a 404 with Google's name on it.
+
+This module made exactly that mistake: its first writing default was `gemini-3.1-flash`, invented by
+pattern-matching `gemini-3.1-flash-image`. Google has never had one - that generation ships flash as
+`-image` and `-lite` and nothing in between.
+
+So `lib/models.ts` asks `GET /v1beta/models` with the site's own key and the settings tab offers the
+answer, keeping the text box behind a link. The listing says which **methods** a model supports and
+never which modalities it emits, so image and writing models are the same shape in the response and
+only the name tells them apart (`-image`, `nano-banana`); that rule is allowed to rot, because the
+worst it can do is leave something out of a menu that still has a box beside it. Models that answer
+`generateContent` and still cannot write a reply - tts, transcribe, Lyria, robotics, computer-use,
+deep-research - are filtered out by name too. A Live model is excluded by method rather than by name:
+it speaks `bidiGenerateContent`, and asking it for `generateContent` is a 404.
+
+The default is `gemini-3.5-flash` rather than the newest flash, on purpose. `gemini-3.8-flash` exists
+and takes the request, and answered `503 UNAVAILABLE` on every attempt the day this was written -
+Google names models faster than it builds capacity for them. A default is the name every install
+starts on, so it wants to be the one that answers.
+
+**Thinking parts are dropped, not joined.** These models reason before answering (a verified call
+spent a thousand tokens on it) and the API may return that reasoning as a part of its own. Joined
+onto the JSON it would fail to parse and be handed to somebody as a draft, so `answerText` filters
+`thought: true` out.
 
 ## What it depends on
 

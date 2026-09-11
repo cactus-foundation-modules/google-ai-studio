@@ -1,8 +1,89 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 const API = '/api/m/google-ai-studio/admin/settings'
+const MODELS_API = '/api/m/google-ai-studio/admin/models'
+
+/** One of Google's models, as the menus below offer it. The shape is declared
+ *  here rather than imported from lib/models.ts: it is two strings, and a
+ *  client component has no business reaching into a file that talks to Google. */
+type GoogleModel = { id: string, label: string }
+
+type ModelLists = { image: GoogleModel[], text: GoogleModel[], note?: string }
+
+/**
+ * A model setting: Google's own list where we could get it, a text box where we
+ * could not, and a way between the two whichever way round you start.
+ *
+ * Both of these were text boxes to begin with, so that a model Google named
+ * this morning needs no module release to use. That much was right; what it
+ * missed is that a typed name is a guess, and a wrong guess is not found out
+ * until somebody presses the button an hour later and gets a 404 with Google's
+ * name on it. So the list is offered and the box is kept.
+ */
+function ModelField({ label, hint, value, options, note, disabled, onChange }: {
+  label: string
+  hint: ReactNode
+  value: string
+  options: GoogleModel[]
+  /** Why there is no list, when there is no list. */
+  note: string
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  const known = options.some((model) => model.id === value)
+  // 'auto' follows the saved value: a name off the list gets the list, and a
+  // name that is not on it gets the box, so somebody looking at a setting that
+  // does not work sees the thing they typed rather than a menu quietly showing
+  // something else.
+  const [mode, setMode] = useState<'auto' | 'list' | 'text'>('auto')
+  const showList = options.length > 0 && (mode === 'list' || (mode === 'auto' && known))
+
+  return (
+    <div className="field">
+      <label>{label}</label>
+      {showList ? (
+        <select
+          value={known ? value : ''}
+          disabled={disabled}
+          style={{ maxWidth: '22rem' }}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {!known && <option value="" disabled>Choose a model</option>}
+          {options.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.label === model.id ? model.id : `${model.label} - ${model.id}`}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input type="text" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+      )}
+
+      {options.length > 0 && !known && (
+        <p className="field-hint" style={{ color: 'var(--color-danger)' }}>
+          Google&rsquo;s list has no <strong>{value || 'model'}</strong> on this key. That is why
+          nothing comes back when you use it. Pick one from the list instead.
+        </p>
+      )}
+
+      <p className="field-hint">
+        {hint}
+        {' '}
+        {options.length > 0 ? (
+          <button
+            type="button"
+            className="btn btn-link btn-sm"
+            onClick={() => setMode(showList ? 'text' : 'list')}
+          >
+            {showList ? 'Type a name instead' : 'Choose from Google\u2019s list'}
+          </button>
+        ) : note}
+      </p>
+    </div>
+  )
+}
 
 type State = {
   hasApiKey: boolean
@@ -51,6 +132,10 @@ function draftOf(state: State): Draft {
 export function GoogleAiStudioSettingsTab() {
   const [saved, setSaved] = useState<State | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  // Asked of Google, once the settings are in, so a model name is chosen rather
+  // than typed from memory. A soft failure everywhere: no key, no network, a
+  // rate limit - the two fields fall back to the boxes they have always been.
+  const [models, setModels] = useState<ModelLists>({ image: [], text: [] })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
@@ -65,14 +150,24 @@ export function GoogleAiStudioSettingsTab() {
     } catch { /* retry on next open */ }
   }, [])
 
+  const loadModels = useCallback(async () => {
+    try {
+      const res = await fetch(MODELS_API)
+      if (!res.ok) return
+      setModels(await res.json() as ModelLists)
+    } catch { /* the text boxes still work */ }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     void (async () => {
       await Promise.resolve()
-      if (!cancelled) await load()
+      if (cancelled) return
+      await load()
+      if (!cancelled) await loadModels()
     })()
     return () => { cancelled = true }
-  }, [load])
+  }, [load, loadModels])
 
   const send = useCallback(async (body: Record<string, unknown>) => {
     setBusy(true)
@@ -94,12 +189,15 @@ export function GoogleAiStudioSettingsTab() {
         setDraft(draftOf(answer))
       }
       setMsg('Saved.')
+      // A key pasted in - or taken out - changes what Google will tell us, and
+      // the list is cached against the key it was fetched with.
+      void loadModels()
     } catch {
       setErr('Could not reach the site to save those settings.')
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [loadModels])
 
   if (!saved || !draft) return <p className="field-hint">Loading…</p>
 
@@ -235,18 +333,15 @@ export function GoogleAiStudioSettingsTab() {
         </p>
       </div>
 
-      <div className="field">
-        <label>Model</label>
-        <input
-          type="text"
-          value={draft.imageModel}
-          onChange={(e) => set('imageModel', e.target.value)}
-        />
-        <p className="field-hint">
-          Which of Google&rsquo;s picture models to use. Leave it alone unless Google has named a new
-          one and you would like to try it.
-        </p>
-      </div>
+      <ModelField
+        label="Model"
+        value={draft.imageModel}
+        options={models.image}
+        note={models.note ?? ''}
+        disabled={busy}
+        onChange={(value) => set('imageModel', value)}
+        hint={<>Which of Google&rsquo;s picture models to use. Leave it alone unless Google has named a new one and you would like to try it.</>}
+      />
 
       <h3 style={{ fontSize: '0.9375rem', margin: '1.5rem 0 0.25rem' }}>Replies</h3>
       <p className="field-hint" style={{ marginBottom: '0.75rem' }}>
@@ -283,19 +378,15 @@ export function GoogleAiStudioSettingsTab() {
         </p>
       </div>
 
-      <div className="field">
-        <label>Writing model</label>
-        <input
-          type="text"
-          value={draft.textModel}
-          onChange={(e) => set('textModel', e.target.value)}
-        />
-        <p className="field-hint">
-          Which of Google&rsquo;s models writes the drafts. A different one from the picture model
-          above, because a model that draws cannot write a sentence. Leave it alone unless Google
-          has named a new one and you would like to try it.
-        </p>
-      </div>
+      <ModelField
+        label="Writing model"
+        value={draft.textModel}
+        options={models.text}
+        note={models.note ?? ''}
+        disabled={busy}
+        onChange={(value) => set('textModel', value)}
+        hint={<>Which of Google&rsquo;s models writes the drafts. A different one from the picture model above, because a model that draws cannot write a sentence.</>}
+      />
 
       {err && <div className="alert alert-error">{err}</div>}
       {msg && <div className="alert alert-success">{msg}</div>}

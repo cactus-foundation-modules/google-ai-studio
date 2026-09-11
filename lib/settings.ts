@@ -33,8 +33,21 @@ export const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image'
 
 /** The model that wrote the words on the same day. A different job needs a
  *  different model - the picture one cannot write a sentence - so it is its own
- *  setting rather than a second use of the one above. */
-export const DEFAULT_TEXT_MODEL = 'gemini-3.1-flash'
+ *  setting rather than a second use of the one above.
+ *
+ *  CHECKED AGAINST GOOGLE'S OWN LISTING, not guessed. The first value here was
+ *  `gemini-3.1-flash`, which has never existed: that generation ships flash as
+ *  `-image` and `-lite` and nothing else, so every suggestion came back "Google
+ *  does not know that model". Hence lib/models.ts and the menu on the settings
+ *  tab - a model name is not a thing to work out from the pattern of the last
+ *  one.
+ *
+ *  Not the newest one, deliberately. `gemini-3.8-flash` exists and takes the
+ *  request, and answered 503 UNAVAILABLE ("experiencing high demand") on every
+ *  attempt the day this was written; a default is the name every install starts
+ *  on, so it wants to be the one that answers rather than the one with the
+ *  highest number. Both are on the menu. */
+export const DEFAULT_TEXT_MODEL = 'gemini-3.5-flash'
 
 /** How this business sounds, unless the owner says otherwise.
  *
