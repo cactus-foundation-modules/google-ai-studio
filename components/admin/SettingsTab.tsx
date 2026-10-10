@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { TabStrip } from '@/components/admin/TabStrip'
 import { useTabParam } from '@/components/admin/useTabParam'
 import { SettingsHeaderActions, SettingsHeaderStatus } from '@/components/admin/SettingsHeaderActions'
+import { InfoTip } from '@/components/admin/InfoTip'
 
 const API = '/api/m/google-ai-studio/admin/settings'
 const MODELS_API = '/api/m/google-ai-studio/admin/models'
@@ -244,13 +245,15 @@ export function GoogleAiStudioSettingsTab() {
       {sub === 'connection' && (
         <div className="settings-cols">
           <div className="card">
-      <p className="field-hint" style={{ marginBottom: '1.25rem' }}>
-        One key from Google AI Studio, and this site can make pictures for you and draft replies to
-        your customers. With the Shop installed, a product&rsquo;s Images tab grows an AI photo
-        section; with a mailbox or a contact form installed, the reply box grows a
-        &ldquo;Suggest reply&rdquo; button. Google charges for both, so the settings below are worth
-        a moment&rsquo;s thought.
-      </p>
+      <div className="card-title">
+        Connection
+        <InfoTip>
+          One key from Google AI Studio and this site can make pictures and draft replies to customers: with the Shop, a
+          product&rsquo;s Images tab gains an AI photo section; with a mailbox or contact form, replies gain a
+          &ldquo;Suggest reply&rdquo; button. Google charges for both, so the other settings are worth a moment&rsquo;s
+          thought.
+        </InfoTip>
+      </div>
 
       {saved.apiKeyFromEnv && (
         <div className="alert alert-info">
@@ -303,6 +306,7 @@ export function GoogleAiStudioSettingsTab() {
       {sub === 'pictures' && (
         <div className="settings-cols">
           <div className="card">
+      <div className="card-title">Pictures</div>
       <div className="field">
         <label>How many pictures a job makes</label>
         <input
@@ -349,6 +353,7 @@ export function GoogleAiStudioSettingsTab() {
 
           </div>
           <div className="card">
+      <div className="card-title">Picture style</div>
       <div className="field">
         <label>House style</label>
         <textarea
@@ -382,15 +387,7 @@ export function GoogleAiStudioSettingsTab() {
       {sub === 'replies' && (
         <div className="settings-cols">
           <div className="card">
-      <p className="field-hint" style={{ marginBottom: '0.75rem' }}>
-        Wherever this site has a reply box - a mailbox, the contact form - there is a
-        &ldquo;Suggest reply&rdquo; button under it. Pressing it sends that conversation to Google
-        and offers three drafts back. Nothing is ever sent to anybody without somebody reading it
-        first, and nothing at all leaves this site until the button is pressed.
-      </p>
-
-          </div>
-          <div className="card">
+      <div className="card-title">Suggested replies <InfoTip>Wherever this site has a reply box - a mailbox, the contact form - there is a &ldquo;Suggest reply&rdquo; button under it. Pressing it sends that conversation to Google and offers three drafts back. Nothing is ever sent to anybody without somebody reading it first, and nothing at all leaves this site until the button is pressed.</InfoTip></div>
       <div className="field">
         <label>House style for replies</label>
         <textarea
