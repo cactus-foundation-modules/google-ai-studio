@@ -1,6 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { TabStrip } from '@/components/admin/TabStrip'
+import { useTabParam } from '@/components/admin/useTabParam'
+import { SettingsHeaderActions, SettingsHeaderStatus } from '@/components/admin/SettingsHeaderActions'
 
 const API = '/api/m/google-ai-studio/admin/settings'
 const MODELS_API = '/api/m/google-ai-studio/admin/models'
@@ -129,7 +132,15 @@ function draftOf(state: State): Draft {
   }
 }
 
+const SUB_TABS = [
+  { key: 'connection', label: 'Connection' },
+  { key: 'pictures', label: 'Pictures' },
+  { key: 'replies', label: 'Replies' },
+] as const
+type SubTab = typeof SUB_TABS[number]['key']
+
 export function GoogleAiStudioSettingsTab() {
+  const [sub, setSub] = useTabParam<SubTab>('sub', 'connection', SUB_TABS.map((t) => t.key))
   const [saved, setSaved] = useState<State | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   // Asked of Google, once the settings are in, so a model name is chosen rather
@@ -219,6 +230,20 @@ export function GoogleAiStudioSettingsTab() {
 
   return (
     <div>
+      <TabStrip
+        items={SUB_TABS.map((t) => ({ key: t.key, label: t.label, active: t.key === sub, onClick: () => setSub(t.key) }))}
+      />
+
+      <SettingsHeaderActions>
+        <SettingsHeaderStatus message={msg} error={err} />
+        <button type="button" className="btn btn-primary" onClick={save} disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </button>
+      </SettingsHeaderActions>
+
+      {sub === 'connection' && (
+        <div className="settings-cols">
+          <div className="card">
       <p className="field-hint" style={{ marginBottom: '1.25rem' }}>
         One key from Google AI Studio, and this site can make pictures for you and draft replies to
         your customers. With the Shop installed, a product&rsquo;s Images tab grows an AI photo
@@ -271,8 +296,13 @@ export function GoogleAiStudioSettingsTab() {
         </div>
       )}
 
-      <h3 style={{ fontSize: '0.9375rem', margin: '1.5rem 0 0.25rem' }}>Pictures</h3>
+          </div>
+        </div>
+      )}
 
+      {sub === 'pictures' && (
+        <div className="settings-cols">
+          <div className="card">
       <div className="field">
         <label>How many pictures a job makes</label>
         <input
@@ -286,32 +316,6 @@ export function GoogleAiStudioSettingsTab() {
         <p className="field-hint">
           The number each job starts on. It can be changed for any one job, and every picture is
           charged for separately, so three is a sensible place to start.
-        </p>
-      </div>
-
-      <div className="field">
-        <label>House style</label>
-        <textarea
-          rows={5}
-          value={draft.productPhotoPrompt}
-          onChange={(e) => set('productPhotoPrompt', e.target.value)}
-        />
-        <p className="field-hint">
-          Added to the front of every product photo job - the way your photographs always look,
-          rather than what any one of them is of. It can be adjusted for a single job without
-          changing it here.
-          {draft.productPhotoPrompt !== saved.housePromptDefault && (
-            <>
-              {' '}
-              <button
-                type="button"
-                className="btn btn-link btn-sm"
-                onClick={() => set('productPhotoPrompt', saved.housePromptDefault)}
-              >
-                Restore the standard wording
-              </button>
-            </>
-          )}
         </p>
       </div>
 
@@ -343,7 +347,41 @@ export function GoogleAiStudioSettingsTab() {
         hint={<>Which of Google&rsquo;s picture models to use. Leave it alone unless Google has named a new one and you would like to try it.</>}
       />
 
-      <h3 style={{ fontSize: '0.9375rem', margin: '1.5rem 0 0.25rem' }}>Replies</h3>
+          </div>
+          <div className="card">
+      <div className="field">
+        <label>House style</label>
+        <textarea
+          rows={5}
+          value={draft.productPhotoPrompt}
+          onChange={(e) => set('productPhotoPrompt', e.target.value)}
+        />
+        <p className="field-hint">
+          Added to the front of every product photo job - the way your photographs always look,
+          rather than what any one of them is of. It can be adjusted for a single job without
+          changing it here.
+          {draft.productPhotoPrompt !== saved.housePromptDefault && (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="btn btn-link btn-sm"
+                onClick={() => set('productPhotoPrompt', saved.housePromptDefault)}
+              >
+                Restore the standard wording
+              </button>
+            </>
+          )}
+        </p>
+      </div>
+
+          </div>
+        </div>
+      )}
+
+      {sub === 'replies' && (
+        <div className="settings-cols">
+          <div className="card">
       <p className="field-hint" style={{ marginBottom: '0.75rem' }}>
         Wherever this site has a reply box - a mailbox, the contact form - there is a
         &ldquo;Suggest reply&rdquo; button under it. Pressing it sends that conversation to Google
@@ -351,6 +389,8 @@ export function GoogleAiStudioSettingsTab() {
         first, and nothing at all leaves this site until the button is pressed.
       </p>
 
+          </div>
+          <div className="card">
       <div className="field">
         <label>House style for replies</label>
         <textarea
@@ -388,12 +428,9 @@ export function GoogleAiStudioSettingsTab() {
         hint={<>Which of Google&rsquo;s models writes the drafts. A different one from the picture model above, because a model that draws cannot write a sentence.</>}
       />
 
-      {err && <div className="alert alert-error">{err}</div>}
-      {msg && <div className="alert alert-success">{msg}</div>}
-
-      <button type="button" className="btn btn-primary" onClick={save} disabled={busy}>
-        {busy ? 'Saving…' : 'Save'}
-      </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
